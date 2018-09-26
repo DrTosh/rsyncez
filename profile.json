@@ -1,0 +1,36 @@
+{
+    "connection": [{
+            "name": "backupserver1",
+            "source": {
+                "path": "/mnt/y/tmp",
+                "type": "local"
+            },
+            "destination": {
+                "path": "drtosh@drtosh.de:/home/drtosh/stuff/tmp",
+                "type": "ssh"
+            }
+        },
+        {
+            "name": "backupserver2",
+            "source": {
+                "path": "/mnt/y/",
+                "type": "local"
+            },
+            "destination": {
+                "path": "drtosh@drtosh.de:/home/drtosh/stuff/",
+                "type": "ssh"
+            }
+        }
+    ],
+    "folder": [{
+            "name": "small",
+            "folder": ["folder1", "folder2"],
+            "type": "include"
+        },
+        {
+            "name": "full",
+            "folder": ["$RECYCLE.BIN", "System Volume Information"],
+            "type": "exclude"
+        }
+    ]
+}
