@@ -1,25 +1,14 @@
 {
-    "connection": [{
-            "name": "backupserver1",
-            "source": {
-                "path": "/mnt/y/tmp",
-                "type": "local"
-            },
-            "destination": {
-                "path": "drtosh@drtosh.de:/home/drtosh/stuff/tmp",
-                "type": "ssh"
-            }
+    "test": "superhero",
+    "endpoint": [{
+            "name": "localdir",
+            "path": "/mnt/y",
+            "type": "local"
         },
         {
-            "name": "backupserver2",
-            "source": {
-                "path": "/mnt/y/",
-                "type": "local"
-            },
-            "destination": {
-                "path": "drtosh@drtosh.de:/home/drtosh/stuff/",
-                "type": "ssh"
-            }
+            "name": "serverdir",
+            "path": "drtosh@drtosh.de:/home/drtosh/stuff",
+            "type": "ssh"
         }
     ],
     "folder": [{

@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <iostream>
 #include <string>
+#include "json.hpp"
+#include <fstream>
+
+using json = nlohmann::json;
 
 std::string source;
 std::string destination;
@@ -17,8 +21,7 @@ void usage()
     std::cout <<  "usage: sync [push|pull] [connection] [folder]\n" <<
         "sync add connection [name] [source] [type] [destination] [type]" <<
         "sync delete connection [name]" <<
-        "sync update connection [name] -s [source] -s" <<
-
+        "sync update connection [name] -s [source] -s" << std::endl;
 }
 
 void getParams()
@@ -26,8 +29,51 @@ void getParams()
 
 }
 
+std::string buildPathFromJson(json _j, std::string _name)
+{
+    std::string result;
+
+    result = _j["path"];
+    
+    if(_j["type"] == "ssh")
+    {
+        result = "-e ssh " + result;
+    }
+
+    return result;
+}
+
 int main(int argc, char* argv[])
 {
+    std::ifstream file("profile.json");
+
+    json j;
+    file >> j;
+
+    // std::cout << j["test1"] << std::endl;
+    std::string sourceName = "localdir";
+    std::string destinationName = "serverdir";
+
+    for(int run = 0; j["endpoint"][run] != nullptr; run++)
+    {
+        json currentJson = j["endpoint"][run];
+        
+        if(currentJson["name"] == sourceName)
+        {
+            source = buildPathFromJson(currentJson, sourceName);
+        }
+        else if (currentJson["name"] == destinationName)
+        {
+            destination = buildPathFromJson(currentJson, destinationName);
+        }
+    }
+
+    std::cout << source << std::endl;
+    std::cout << destination << std::endl;
+
+    exit(1);
+
+
     printf("[1] push to server\n");
     printf("[2] pull from server\n");
     printf("select a sync method: ");
@@ -99,14 +145,14 @@ int main(int argc, char* argv[])
 // ## full sync
 
 // ## just a few folder
-// echo rsync -auvz --progress \
-//     $source \
-//     $includes \
-//     $exludes \
+// echo rsync -auvz --progress 
+//     $source 
+//     $includes 
+//     $exludes 
 //     $destination
 
 
-// # rsync -auvz --progress /mnt/y/tmp \
-// #   --exclude='$RECYCLE.BIN' \
-// #   --exclude='System Volume Information' \
+// # rsync -auvz --progress /mnt/y/tmp 
+// #   --exclude='$RECYCLE.BIN' 
+// #   --exclude='System Volume Information' 
 // #   -e ssh drtosh@drtosh.de:/home/drtosh/stuff/tmp
