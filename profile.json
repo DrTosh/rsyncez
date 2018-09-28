@@ -1,5 +1,4 @@
 {
-    "test": "superhero",
     "endpoint": [{
             "name": "localdir",
             "path": "/mnt/y",
@@ -11,15 +10,13 @@
             "type": "ssh"
         }
     ],
-    "folder": [{
+    "folderbundle": [{
             "name": "small",
-            "folder": ["folder1", "folder2"],
-            "type": "include"
+            "folder": ["folder1", "folder2"]
         },
         {
             "name": "full",
-            "folder": ["$RECYCLE.BIN", "System Volume Information"],
-            "type": "exclude"
+            "folder": ["$RECYCLE.BIN", "System Volume Information"]
         }
     ]
 }

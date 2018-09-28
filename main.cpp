@@ -3,30 +3,75 @@
 #include <string>
 #include "json.hpp"
 #include <fstream>
+#include <vector>
 
 using json = nlohmann::json;
 
-std::string source;
-std::string destination;
-std::string includes;
-std::string excludes;
-std::string includeFolder;
-std::string clientpath = "/mnt/y/";
-std::string serverpath = "-e ssh drtosh@drtosh.de:/home/drtosh/stuff/";
-
-enum SYNCMODE { smPUSH, smPULL };
+std::string source, sourceName;
+std::string destination, destinationName;
+bool isExclude = false;
+std::vector<std::string> paramFolder;
+std::vector<std::string> folder;
 
 void usage()
 {
-    std::cout <<  "usage: sync [push|pull] [connection] [folder]\n" <<
-        "sync add connection [name] [source] [type] [destination] [type]" <<
-        "sync delete connection [name]" <<
-        "sync update connection [name] -s [source] -s" << std::endl;
+    std::cout <<  "usage: sync [source] [destination] [folder | folderbundle]" << std::endl <<
+                  "  -x : folder and folderbundles are exluded, rest ist synced" << std::endl;
 }
 
-void getParams()
+void getParams(int _argc, char* _argv[])
 {
+    if(_argc < 3)
+    {
+        std::cerr << "too few arguments given" << std::endl;
+        usage();
+        exit(-1);
+    }    
 
+    sourceName = _argv[1];
+    destinationName = _argv[2];
+
+    for(int run = 3; run < _argc; run++)
+    {
+        
+        if(std::string(_argv[run]) == "-x")
+        {
+            isExclude = true;
+        }
+        else 
+        {
+            paramFolder.push_back(_argv[run]);
+        }
+    }
+}
+
+void addFolderBundleFromJson(json _j)
+{
+    for(int run = 0; _j[run] != nullptr; run++)
+    {
+        folder.push_back(_j[run]);
+    }
+}
+
+void buildFolderFromJson(json _j)
+{
+    for(int run = 0; run < paramFolder.size(); run++)
+    {
+        bool found = false;
+        for(int fly = 0; _j[fly] != nullptr; fly++)
+        {
+            if(_j[fly]["name"] == paramFolder[run])
+            {
+                found = true;
+                addFolderBundleFromJson(_j[fly]["folder"]);
+            }
+        }
+
+        if(!found)
+        {
+            folder.push_back(paramFolder[run]);
+        }
+    }
 }
 
 std::string buildPathFromJson(json _j, std::string _name)
@@ -55,16 +100,21 @@ std::string buildPathFromJson(json _j, std::string _name)
     return result;
 }
 
+void showFolder()
+{
+    for(int run = 0; run < folder.size(); run++)
+    {
+        std::cout << folder[run] << std::endl;
+    }
+}
+
 int main(int argc, char* argv[])
 {
+    getParams(argc, argv);
     std::ifstream file("profile.json");
 
     json j;
     file >> j;
-
-    // std::cout << j["test1"] << std::endl;
-    std::string sourceName = "localdir";
-    std::string destinationName = "serverdir";
 
     for(int run = 0; j["endpoint"][run] != nullptr; run++)
     {
@@ -95,57 +145,32 @@ int main(int argc, char* argv[])
     std::cout << source << std::endl;
     std::cout << destination << std::endl;
 
+    if(j["folderbundle"] == nullptr)
+    {
+        std::cerr << "folderbundle not defined in config file" << std::endl;
+        exit(-1);
+    }
+
+    buildFolderFromJson(j["folderbundle"]);
+
+    showFolder();
+
+    if(isExclude)
+    {
+        std::cout << "exclude mode" << std::endl;
+    }
+    else 
+    {
+        std::cout << "include mode" << std::endl;
+    }
+    
     exit(1);
 
-
-    printf("[1] push to server\n");
-    printf("[2] pull from server\n");
-    printf("select a sync method: ");
-    
-    int sync_method = getchar();
-
-    if(sync_method < 1 || sync_method > 2)
-    {
-        printf("\nno valid option selected\n");
-        exit(-1);
-    }
-
-    printf("\n");
-
-    if(sync_method == 1)
-    {
-        printf("push from %s to %s\n", clientpath.c_str(), serverpath.c_str());
-        source = clientpath;
-        destination = serverpath;
-    } 
-    else
-    {
-        printf("pull from %s to %s", serverpath.c_str(), clientpath.c_str());
-        source = serverpath;
-        destination = clientpath;
-    }
-
-    printf("[1] select some folder");
-    printf("[2] deselect some folder");
-    printf("[3] full sync");
-
-    int target_method = getchar();   
-
-    if(target_method < 1 || target_method > 3)
-    {
-        printf("no valid option selected");
-        exit(-1);
-    }
-
-    std::string folder;
-    scanf("%s", &folder);
-    printf("%s", folder.c_str());
-
-    for(int run = 0; run < 0; run++)
-    {
-        // $includeFolder=$includeFolder'--include=$run --include=$run/**'
-        //     $excludeFolder=$excludeFolder'--exclude=$run'
-    }
+    // for(int run = 0; run < 0; run++)
+    // {
+    //     // $includeFolder=$includeFolder'--include=$run --include=$run/**'
+    //     //     $excludeFolder=$excludeFolder'--exclude=$run'
+    // }
 }
 
 
