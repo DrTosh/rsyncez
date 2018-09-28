@@ -33,8 +33,20 @@ std::string buildPathFromJson(json _j, std::string _name)
 {
     std::string result;
 
+    if((_j["path"] == nullptr) || (_j["path"] == ""))
+    {
+        std::cerr << "path of " << _j["name"] << " is not defined in config file" << std::endl;
+        exit(-1);
+    } 
+
+    if((_j["type"] == nullptr) || (_j["type"] == ""))
+    {
+        std::cerr << "type of " << _j["name"] << " is not defined in config file" << std::endl;
+        exit(-1);
+    }
+
     result = _j["path"];
-    
+
     if(_j["type"] == "ssh")
     {
         result = "-e ssh " + result;
@@ -57,7 +69,7 @@ int main(int argc, char* argv[])
     for(int run = 0; j["endpoint"][run] != nullptr; run++)
     {
         json currentJson = j["endpoint"][run];
-        
+
         if(currentJson["name"] == sourceName)
         {
             source = buildPathFromJson(currentJson, sourceName);
@@ -68,6 +80,18 @@ int main(int argc, char* argv[])
         }
     }
 
+    if (source == "")
+    {
+        std::cerr << "source \"" << sourceName << "\" not found in endpoints, please check config file" << std::endl;
+        exit(-1);
+    }
+
+    if (destination == "")
+    {
+        std::cerr << "destination \"" << destinationName << "\" not found in endpoints, please check config file" << std::endl;
+        exit(-1);
+    }
+    
     std::cout << source << std::endl;
     std::cout << destination << std::endl;
 
