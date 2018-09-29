@@ -1,4 +1,5 @@
 {
+    "rsyncflags": "-auvz --progress",
     "endpoint": [{
             "name": "localdir",
             "path": "/mnt/y",

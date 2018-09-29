@@ -7,16 +7,20 @@
 
 using json = nlohmann::json;
 
+std::string configFilename = "profile.json";
 std::string source, sourceName;
 std::string destination, destinationName;
+std::string rsyncFlags;
 bool isExclude = false;
+bool isDebug = false;
 std::vector<std::string> paramFolder;
 std::vector<std::string> folder;
 
 void usage()
 {
     std::cout <<  "usage: sync [source] [destination] [folder | folderbundle]" << std::endl <<
-                  "  -x : folder and folderbundles are exluded, rest ist synced" << std::endl;
+                  "  -x : folder and folderbundles are exluded, rest ist synced" << std::endl <<
+                  "  -d : debug mode for more informations:" << std::endl;
 }
 
 void getParams(int _argc, char* _argv[])
@@ -38,6 +42,10 @@ void getParams(int _argc, char* _argv[])
         {
             isExclude = true;
         }
+        else if(std::string(_argv[run]) == "-d")
+        {
+            isDebug = true;
+        }
         else 
         {
             paramFolder.push_back(_argv[run]);
@@ -50,27 +58,6 @@ void addFolderBundleFromJson(json _j)
     for(int run = 0; _j[run] != nullptr; run++)
     {
         folder.push_back(_j[run]);
-    }
-}
-
-void buildFolderFromJson(json _j)
-{
-    for(int run = 0; run < paramFolder.size(); run++)
-    {
-        bool found = false;
-        for(int fly = 0; _j[fly] != nullptr; fly++)
-        {
-            if(_j[fly]["name"] == paramFolder[run])
-            {
-                found = true;
-                addFolderBundleFromJson(_j[fly]["folder"]);
-            }
-        }
-
-        if(!found)
-        {
-            folder.push_back(paramFolder[run]);
-        }
     }
 }
 
@@ -100,25 +87,27 @@ std::string buildPathFromJson(json _j, std::string _name)
     return result;
 }
 
-void showFolder()
+void readRsyncFlagsFromJson(json _j)
 {
-    for(int run = 0; run < folder.size(); run++)
+    if(_j["rsyncflags"] == nullptr)
     {
-        std::cout << folder[run] << std::endl;
+        std::cerr << "rsyncflags are not defined in configfile" << std::endl;
+        exit(-1);
+    }
+
+    rsyncFlags = _j["rsyncflags"];
+
+    if(isDebug)
+    {
+        std::cout << "rsyncflags:\n\t" << rsyncFlags << std::endl;
     }
 }
 
-int main(int argc, char* argv[])
+void readSourceAndDestinationFromJson(json _j)
 {
-    getParams(argc, argv);
-    std::ifstream file("profile.json");
-
-    json j;
-    file >> j;
-
-    for(int run = 0; j["endpoint"][run] != nullptr; run++)
+    for(int run = 0; _j["endpoint"][run] != nullptr; run++)
     {
-        json currentJson = j["endpoint"][run];
+        json currentJson = _j["endpoint"][run];
 
         if(currentJson["name"] == sourceName)
         {
@@ -142,28 +131,66 @@ int main(int argc, char* argv[])
         exit(-1);
     }
     
-    std::cout << source << std::endl;
-    std::cout << destination << std::endl;
+    if(isDebug)
+    {
+        std::cout << "source:\n\t" << source << std::endl;
+        std::cout << "destination:\n\t" << destination << std::endl;
+    }
+}
 
-    if(j["folderbundle"] == nullptr)
+void readFolderBundleFromJson(json _j)
+{
+    if(_j["folderbundle"] == nullptr)
     {
         std::cerr << "folderbundle not defined in config file" << std::endl;
         exit(-1);
     }
 
-    buildFolderFromJson(j["folderbundle"]);
-
-    showFolder();
-
-    if(isExclude)
+    _j = _j["folderbundle"];
+    for(int run = 0; run < paramFolder.size(); run++)
     {
-        std::cout << "exclude mode" << std::endl;
+        bool found = false;
+        for(int fly = 0; _j[fly] != nullptr; fly++)
+        {
+            if(_j[fly]["name"] == paramFolder[run])
+            {
+                found = true;
+                addFolderBundleFromJson(_j[fly]["folder"]);
+            }
+        }
+
+        if(!found)
+        {
+            folder.push_back(paramFolder[run]);
+        }
     }
-    else 
+
+    if(isDebug)
     {
-        std::cout << "include mode" << std::endl;
+        std::cout << "folder: " << std::endl;
+        for(int run = 0; run < folder.size(); run++)
+        {
+            std::cout << "\t" << folder[run] << std::endl;
+        }
     }
+}
+
+void readJsonConfigFile()
+{
+    std::ifstream file(configFilename);
+    json j;
+    file >> j;
+
+    readRsyncFlagsFromJson(j);
+    readSourceAndDestinationFromJson(j);
+    readFolderBundleFromJson(j);
     
+}
+
+int main(int argc, char* argv[])
+{
+    getParams(argc, argv);
+    readJsonConfigFile();
     exit(1);
 
     // for(int run = 0; run < 0; run++)
