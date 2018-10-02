@@ -9,13 +9,15 @@
 using json = nlohmann::json;
 
 std::string configFilename = "profile.json";
-std::string source, sourceName;
-std::string destination, destinationName;
-std::string rsyncFlags;
+std::string sourceName;
+std::string destinationName;
+
 bool isExclude = false;
 bool isDebug = false;
+std::vector<std::string> rsyncFlags;
 std::vector<std::string> paramFolder;
 std::vector<std::string> folder;
+std::vector<std::string> rsyncArgs;
 
 void usage()
 {
@@ -38,7 +40,6 @@ void getParams(int _argc, char* _argv[])
 
     for(int run = 3; run < _argc; run++)
     {
-        
         if(std::string(_argv[run]) == "-x")
         {
             isExclude = true;
@@ -70,11 +71,9 @@ void readRsyncFlagsFromJson(json _j)
         exit(-1);
     }
 
-    rsyncFlags = _j["rsyncflags"];
-
-    if(isDebug)
+    for(int run = 0; _j["rsyncflags"][run] != nullptr; run++)
     {
-        std::cout << "rsyncflags:\n\t" << rsyncFlags << std::endl;
+        rsyncFlags.push_back(_j["rsyncflags"][run]);
     }
 }
 
@@ -116,11 +115,12 @@ void readSourceAndDestinationFromJson(json _j)
 
         if(currentJson["name"] == sourceName)
         {
-            source = buildPathFromJson(currentJson, sourceName);
+            hier weiter machen source und destination in args list einfuegen
+            buildPathFromJson(currentJson, sourceName);
         }
         else if (currentJson["name"] == destinationName)
         {
-            destination = buildPathFromJson(currentJson, destinationName);
+            buildPathFromJson(currentJson, destinationName);
         }
     }
 
@@ -134,12 +134,6 @@ void readSourceAndDestinationFromJson(json _j)
     {
         std::cerr << "destination \"" << destinationName << "\" not found in endpoints, please check config file" << std::endl;
         exit(-1);
-    }
-    
-    if(isDebug)
-    {
-        std::cout << "source:\n\t" << source << std::endl;
-        std::cout << "destination:\n\t" << destination << std::endl;
     }
 }
 
@@ -169,15 +163,6 @@ void readFolderBundleFromJson(json _j)
             folder.push_back(paramFolder[run]);
         }
     }
-
-    if(isDebug)
-    {
-        std::cout << "folder: " << std::endl;
-        for(int run = 0; run < folder.size(); run++)
-        {
-            std::cout << "\t" << folder[run] << std::endl;
-        }
-    }
 }
 
 void readJsonConfigFile()
@@ -191,40 +176,35 @@ void readJsonConfigFile()
     readFolderBundleFromJson(j);
 }
 
-std::string buildRsyncCommandArguments()
+void buildRsyncCommandArguments()
 {
-    std::string command;
-    command = rsyncFlags + " " + source + " " + destination;
+    rsyncArgs.push_back("rsync");
+    
+    for(int run = 0; run < rsyncFlags.size(); run++)
+    {
+        rsyncArgs.push_back(rsyncFlags[run]);    
+    }
+
+    rsyncArgs.push_back(source);
+    rsyncArgs.push_back(destination);
 
     for(int run = 0; run < folder.size(); run++)
     {
-        if(folder[run].find(" ") >= 0)
-        {
-            folder[run] = "\"" + folder[run] + "\"";
-        }
-
         if(isExclude)
         {
-            command += " --exclude=" + folder[run];
+            rsyncArgs.push_back("--exclude=" + folder[run]);
         }
         else
         {
-            command += " --include=" + folder[run];
-            command += " --include=" + folder[run] + "/**";
+            rsyncArgs.push_back("--include=" + folder[run]);
+            rsyncArgs.push_back("--include=" + folder[run] + "/**");
         }
     }
 
     if(!isExclude)
     {
-        command += " --exclude=*";
+         rsyncArgs.push_back("--exclude=*");
     }
-
-    if(isDebug)
-    {
-         std::cout << "command:\n\t" << "rsync " << command << std::endl;
-    }
-
-    return command;
 }
 
 std::vector<std::string> splitString(std::string _text, char _delimiter, bool saveQuoted)
@@ -262,8 +242,58 @@ std::vector<std::string> splitString(std::string _text, char _delimiter, bool sa
     return result;
 }
 
-char** vectorToCString(std::vector<std::string> _v)
+void executeRsync()
 {
+    std::vector<char*> cstrings;   
+    cstrings.reserve(rsyncArgs.size());
+
+    for(int run = 0; run < rsyncArgs.size(); run++)
+    {
+        cstrings.push_back(&rsyncArgs[run][0]);
+    }
+
+    execvp("rsync", cstrings.data());
+    std::cerr << "failed to launch rsync errno: " << errno << std::endl;
+    exit(-1);
+}
+
+void showDebugInfo()
+{
+    std::string command = "rsync";
+
+    std::cout << "rsyncFlags:" << std::endl;
+    for(int run = 0; run < rsyncFlags.size(); run++)
+    {
+        command += " " + rsyncFlags[run];
+        std::cout << "\t" << rsyncFlags[run] << std::endl;
+    }
+
+    command += " " + source;
+    command += " " + destination;
+    std::cout << "source:\n\t" << source << std::endl;
+    std::cout << "destination:\n\t" << destination << std::endl;
+
+    std::cout << "folder: " << std::endl;
+    for(int run = 0; run < folder.size(); run++)
+    {
+        if(folder[run].find(" ") > -1)
+        {
+            command += " \"" + folder[run] + "\"";
+        }
+        else
+        {
+            command += " " + folder[run];
+        }
+        std::cout << "\t" << folder[run] << std::endl;
+    }
+
+    std::cout << "rsyncArgs:" << std::endl;
+    for(int run = 0; run < rsyncArgs.size(); run++)
+    {
+        std::cout << "\t" << rsyncArgs[run] << std::endl;
+    }
+
+    std::cout << "command:\n\t" << command << std::endl;
 
 }
 
@@ -271,22 +301,12 @@ int main(int argc, char* argv[])
 {
     getParams(argc, argv);
     readJsonConfigFile();
-    std::string args = buildRsyncCommandArguments();
-
-    // std::string args = "word1 word2 \"super duper one word\"";
-    std::vector<std::string> argss = splitString(args, ' ', true);
-
-    std::vector<char*> cstrings;   
-    cstrings.reserve(argss.size());
-
-    for(auto& s: argss)
-        cstrings.push_back(&s[0]);
-
-    // execve("rsync", cstrings.data(), NULL);
-    char *temp[] = {"--help"};
-    execve("rsync", temp, NULL);
-    
-    // exit(1);
+    buildRsyncCommandArguments();
+    if(isDebug)
+    {
+        showDebugInfo();
+    }
+    executeRsync();   
 }
 
 // # rsync -auvz --progress /mnt/y/tmp 
