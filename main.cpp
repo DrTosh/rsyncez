@@ -4,6 +4,7 @@
 #include "json.hpp"
 #include <fstream>
 #include <vector>
+#include <unistd.h>
 
 using json = nlohmann::json;
 
@@ -61,6 +62,22 @@ void addFolderBundleFromJson(json _j)
     }
 }
 
+void readRsyncFlagsFromJson(json _j)
+{
+    if(_j["rsyncflags"] == nullptr)
+    {
+        std::cerr << "rsyncflags are not defined in configfile" << std::endl;
+        exit(-1);
+    }
+
+    rsyncFlags = _j["rsyncflags"];
+
+    if(isDebug)
+    {
+        std::cout << "rsyncflags:\n\t" << rsyncFlags << std::endl;
+    }
+}
+
 std::string buildPathFromJson(json _j, std::string _name)
 {
     std::string result;
@@ -78,6 +95,10 @@ std::string buildPathFromJson(json _j, std::string _name)
     }
 
     result = _j["path"];
+    if(result[result.length() -1] != '/')
+    {
+        result += "/";
+    }
 
     if(_j["type"] == "ssh")
     {
@@ -85,22 +106,6 @@ std::string buildPathFromJson(json _j, std::string _name)
     }
 
     return result;
-}
-
-void readRsyncFlagsFromJson(json _j)
-{
-    if(_j["rsyncflags"] == nullptr)
-    {
-        std::cerr << "rsyncflags are not defined in configfile" << std::endl;
-        exit(-1);
-    }
-
-    rsyncFlags = _j["rsyncflags"];
-
-    if(isDebug)
-    {
-        std::cout << "rsyncflags:\n\t" << rsyncFlags << std::endl;
-    }
 }
 
 void readSourceAndDestinationFromJson(json _j)
@@ -184,49 +189,105 @@ void readJsonConfigFile()
     readRsyncFlagsFromJson(j);
     readSourceAndDestinationFromJson(j);
     readFolderBundleFromJson(j);
-    
+}
+
+std::string buildRsyncCommandArguments()
+{
+    std::string command;
+    command = rsyncFlags + " " + source + " " + destination;
+
+    for(int run = 0; run < folder.size(); run++)
+    {
+        if(folder[run].find(" ") >= 0)
+        {
+            folder[run] = "\"" + folder[run] + "\"";
+        }
+
+        if(isExclude)
+        {
+            command += " --exclude=" + folder[run];
+        }
+        else
+        {
+            command += " --include=" + folder[run];
+            command += " --include=" + folder[run] + "/**";
+        }
+    }
+
+    if(!isExclude)
+    {
+        command += " --exclude=*";
+    }
+
+    if(isDebug)
+    {
+         std::cout << "command:\n\t" << "rsync " << command << std::endl;
+    }
+
+    return command;
+}
+
+std::vector<std::string> splitString(std::string _text, char _delimiter, bool saveQuoted)
+{
+    std::vector<std::string> result;
+    std::string current;
+    bool inQuote = false;
+
+    for(int run = 0; run < _text.length(); run++)
+    {
+        if(_text[run] == '"')
+        {
+            inQuote = !inQuote;
+        }
+
+        if(_text[run] == _delimiter && (!saveQuoted || !inQuote))
+        {
+            if(current != "")
+            {
+                result.push_back(current);
+            }            
+            current = "";
+        }
+        else
+        {
+            current += _text[run];
+        }
+    }
+
+    if(current != "")
+    {
+        result.push_back(current);
+    }   
+
+    return result;
+}
+
+char** vectorToCString(std::vector<std::string> _v)
+{
+
 }
 
 int main(int argc, char* argv[])
 {
     getParams(argc, argv);
     readJsonConfigFile();
-    exit(1);
+    std::string args = buildRsyncCommandArguments();
 
-    // for(int run = 0; run < 0; run++)
-    // {
-    //     // $includeFolder=$includeFolder'--include=$run --include=$run/**'
-    //     //     $excludeFolder=$excludeFolder'--exclude=$run'
-    // }
+    // std::string args = "word1 word2 \"super duper one word\"";
+    std::vector<std::string> argss = splitString(args, ' ', true);
+
+    std::vector<char*> cstrings;   
+    cstrings.reserve(argss.size());
+
+    for(auto& s: argss)
+        cstrings.push_back(&s[0]);
+
+    // execve("rsync", cstrings.data(), NULL);
+    char *temp[] = {"--help"};
+    execve("rsync", temp, NULL);
+    
+    // exit(1);
 }
-
-
-
-// if [ $target_method -eq 1 ]
-// then
-//     echo start sync folders: $folder
-//     $includes=$includeFolder
-//     $exludes="--exclude=*"
-// elif [ $target_method -eq 2 ]
-// then
-//     echo start sync folders: $folder
-//     $exludes="--exclude='$RECYCLE.BIN' --exclude='System Volume Information'"$excludeFolder
-// else
-//     echo start full sync
-//     $exludes="--exclude='$RECYCLE.BIN' --exclude='System Volume Information'"
-// fi
-
-// exit -1
-
-// ## full sync
-
-// ## just a few folder
-// echo rsync -auvz --progress 
-//     $source 
-//     $includes 
-//     $exludes 
-//     $destination
-
 
 // # rsync -auvz --progress /mnt/y/tmp 
 // #   --exclude='$RECYCLE.BIN' 
