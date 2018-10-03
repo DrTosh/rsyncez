@@ -6,6 +6,11 @@
             "type": "local"
         },
         {
+            "name": "localdir2",
+            "path": "/mnt/y/local",
+            "type": "local"
+        },
+        {
             "name": "serverdir",
             "path": "drtosh@drtosh.de:/home/drtosh/stuff",
             "type": "ssh"

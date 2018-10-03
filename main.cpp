@@ -9,12 +9,11 @@
 using json = nlohmann::json;
 
 std::string configFilename = "profile.json";
-std::string sourceName;
-std::string destinationName;
+std::string source;
+std::string destination;
 
 bool isExclude = false;
 bool isDebug = false;
-std::vector<std::string> rsyncFlags;
 std::vector<std::string> paramFolder;
 std::vector<std::string> folder;
 std::vector<std::string> rsyncArgs;
@@ -23,7 +22,7 @@ void usage()
 {
     std::cout <<  "usage: sync [source] [destination] [folder | folderbundle]" << std::endl <<
                   "  -x : folder and folderbundles are exluded, rest ist synced" << std::endl <<
-                  "  -d : debug mode for more informations:" << std::endl;
+                  "  -d : debug mode for more informations" << std::endl;
 }
 
 void getParams(int _argc, char* _argv[])
@@ -35,8 +34,8 @@ void getParams(int _argc, char* _argv[])
         exit(-1);
     }    
 
-    sourceName = _argv[1];
-    destinationName = _argv[2];
+    source = _argv[1];
+    destination = _argv[2];
 
     for(int run = 3; run < _argc; run++)
     {
@@ -73,13 +72,13 @@ void readRsyncFlagsFromJson(json _j)
 
     for(int run = 0; _j["rsyncflags"][run] != nullptr; run++)
     {
-        rsyncFlags.push_back(_j["rsyncflags"][run]);
+        rsyncArgs.push_back(_j["rsyncflags"][run]);
     }
 }
 
-std::string buildPathFromJson(json _j, std::string _name)
+void buildPathFromJson(json _j, std::string _name)
 {
-    std::string result;
+    std::string path;
 
     if((_j["path"] == nullptr) || (_j["path"] == ""))
     {
@@ -93,18 +92,19 @@ std::string buildPathFromJson(json _j, std::string _name)
         exit(-1);
     }
 
-    result = _j["path"];
-    if(result[result.length() -1] != '/')
+    path = _j["path"];
+    if(path[path.length() -1] != '/')
     {
-        result += "/";
+        path += "/";
     }
 
     if(_j["type"] == "ssh")
     {
-        result = "-e ssh " + result;
+       rsyncArgs.push_back("-e");
+       rsyncArgs.push_back("ssh");
     }
 
-    return result;
+    rsyncArgs.push_back(path);
 }
 
 void readSourceAndDestinationFromJson(json _j)
@@ -112,27 +112,31 @@ void readSourceAndDestinationFromJson(json _j)
     for(int run = 0; _j["endpoint"][run] != nullptr; run++)
     {
         json currentJson = _j["endpoint"][run];
-
-        if(currentJson["name"] == sourceName)
+        if(currentJson["name"] == source)
         {
-            hier weiter machen source und destination in args list einfuegen
-            buildPathFromJson(currentJson, sourceName);
+            buildPathFromJson(currentJson, source);
         }
-        else if (currentJson["name"] == destinationName)
+    }
+
+    // two for loops to respect the given order
+    for(int run = 0; _j["endpoint"][run] != nullptr; run++)
+    {
+        json currentJson = _j["endpoint"][run];
+        if(currentJson["name"] == destination)
         {
-            buildPathFromJson(currentJson, destinationName);
+            buildPathFromJson(currentJson, destination);
         }
     }
 
     if (source == "")
     {
-        std::cerr << "source \"" << sourceName << "\" not found in endpoints, please check config file" << std::endl;
+        std::cerr << "source \"" << source << "\" not found in endpoints, please check config file" << std::endl;
         exit(-1);
     }
 
     if (destination == "")
     {
-        std::cerr << "destination \"" << destinationName << "\" not found in endpoints, please check config file" << std::endl;
+        std::cerr << "destination \"" << destination << "\" not found in endpoints, please check config file" << std::endl;
         exit(-1);
     }
 }
@@ -171,6 +175,7 @@ void readJsonConfigFile()
     json j;
     file >> j;
 
+    rsyncArgs.push_back("rsync");
     readRsyncFlagsFromJson(j);
     readSourceAndDestinationFromJson(j);
     readFolderBundleFromJson(j);
@@ -178,16 +183,6 @@ void readJsonConfigFile()
 
 void buildRsyncCommandArguments()
 {
-    rsyncArgs.push_back("rsync");
-    
-    for(int run = 0; run < rsyncFlags.size(); run++)
-    {
-        rsyncArgs.push_back(rsyncFlags[run]);    
-    }
-
-    rsyncArgs.push_back(source);
-    rsyncArgs.push_back(destination);
-
     for(int run = 0; run < folder.size(); run++)
     {
         if(isExclude)
@@ -245,56 +240,36 @@ std::vector<std::string> splitString(std::string _text, char _delimiter, bool sa
 void executeRsync()
 {
     std::vector<char*> cstrings;   
-    cstrings.reserve(rsyncArgs.size());
+    cstrings.reserve(rsyncArgs.size() + 1);
 
     for(int run = 0; run < rsyncArgs.size(); run++)
     {
         cstrings.push_back(&rsyncArgs[run][0]);
     }
 
-    execvp("rsync", cstrings.data());
+    cstrings.push_back(NULL);
+
+    std::cerr << execvp("rsync", cstrings.data()) << std::endl;
     std::cerr << "failed to launch rsync errno: " << errno << std::endl;
     exit(-1);
 }
 
 void showDebugInfo()
 {
-    std::string command = "rsync";
-
-    std::cout << "rsyncFlags:" << std::endl;
-    for(int run = 0; run < rsyncFlags.size(); run++)
+    std::string command;
+    for(int run = 0; run < rsyncArgs.size(); run++)
     {
-        command += " " + rsyncFlags[run];
-        std::cout << "\t" << rsyncFlags[run] << std::endl;
-    }
-
-    command += " " + source;
-    command += " " + destination;
-    std::cout << "source:\n\t" << source << std::endl;
-    std::cout << "destination:\n\t" << destination << std::endl;
-
-    std::cout << "folder: " << std::endl;
-    for(int run = 0; run < folder.size(); run++)
-    {
-        if(folder[run].find(" ") > -1)
+        if(std::count(rsyncArgs[run].begin(), rsyncArgs[run].end(), ' '))
         {
-            command += " \"" + folder[run] + "\"";
+            command += " \"" + rsyncArgs[run] + "\"";
         }
         else
         {
-            command += " " + folder[run];
+            command += " " + rsyncArgs[run];
         }
-        std::cout << "\t" << folder[run] << std::endl;
     }
 
-    std::cout << "rsyncArgs:" << std::endl;
-    for(int run = 0; run < rsyncArgs.size(); run++)
-    {
-        std::cout << "\t" << rsyncArgs[run] << std::endl;
-    }
-
-    std::cout << "command:\n\t" << command << std::endl;
-
+    std::cout << "command:\n\t" << command << std::endl;  
 }
 
 int main(int argc, char* argv[])
