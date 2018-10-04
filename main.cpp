@@ -8,7 +8,7 @@
 
 using json = nlohmann::json;
 
-std::string configFilename = "profile.json";
+std::string configFilename = ".rsyncez.json";
 std::string source;
 std::string destination;
 
