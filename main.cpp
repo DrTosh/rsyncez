@@ -5,6 +5,7 @@
 #include <fstream>
 #include <vector>
 #include <unistd.h>
+#include <iomanip>
 
 using json = nlohmann::json;
 
@@ -13,44 +14,103 @@ std::string source;
 std::string destination;
 
 bool isExclude = false;
-bool isDebug = false;
+bool isBash = false;
+
 std::vector<std::string> paramFolder;
 std::vector<std::string> folder;
 std::vector<std::string> rsyncArgs;
 
 void usage()
 {
-    std::cout <<  "usage: sync [source] [destination] [folder | folderbundle]" << std::endl <<
-                  "  -x : folder and folderbundles are exluded, rest ist synced" << std::endl <<
-                  "  -d : debug mode for more informations" << std::endl;
+    std::cout <<  "usage: sync [source] [destination] [ directory | bundle]" << std::endl <<
+                  "  -x : directories are exluded, rest ist synced" << std::endl <<
+                  "  -c : generate default config file" << std::endl <<
+                  "  -b : only generate bash command" << std::endl <<
+                  "  -h : show help" << std::endl;
+}
+
+void writeDefaultConfigFile()
+{
+    json j = {
+        { "rsyncflags", {"-auvz", "--progress"} },
+        { "endpoint", {
+            {
+                { "name", "local" },
+                { "path", "/home/drtosh/stuff" },
+                { "type", "local" }
+            },
+            {
+                { "name", "server" },
+                { "path", "drtosh.de:/home/drtosh/stuff" },
+                { "type", "ssh" }
+            }
+        }},
+        { "bundle", {
+            {
+                { "name", "small" },
+                { "items", {"folder1", "folder2"} }
+            },
+            {
+                { "name", "ntfs" },
+                { "items", {"$RECYCLE.BIN", "System Volume Information"} }
+            }
+        }}
+    };
+
+    std::ofstream file(configFilename, std::fstream::out);
+    file << std::setw(4) << j << std::endl;
+
+    std::cout << "new config file generated please see and edit: " + configFilename << std::endl;
 }
 
 void getParams(int _argc, char* _argv[])
 {
-    if(_argc < 3)
+    int fixedParamIdx = 1;
+
+    for(int run = 1; run < _argc; run++)
+    {
+        if(_argv[run][0] == '-')
+        {
+            for(int fly = 1; fly < std::string(_argv[run]).length(); fly++)
+            {
+                switch(_argv[run][fly])
+                {
+                    case 'h': usage(); exit(1); break;
+                    case 'c': writeDefaultConfigFile(); exit(1); break;
+                    case 'x': isExclude = true; break;
+                    case 'b': isBash = true; break;
+                    default:  
+                        std::cerr << _argv[run][fly] << " is no valid flag" << std::endl;
+                        usage();
+                        exit(-1); 
+                    break; 
+                }
+            }
+        }
+        else
+        {
+            if(fixedParamIdx == 1)
+            {
+                fixedParamIdx++;
+                source = _argv[run];
+            }
+            else if (fixedParamIdx == 2)
+            {
+                fixedParamIdx++;
+                destination = _argv[run];
+            }
+            else 
+            {
+                paramFolder.push_back(_argv[run]);
+            }
+        }
+    }
+
+    if(fixedParamIdx < 3)
     {
         std::cerr << "too few arguments given" << std::endl;
         usage();
         exit(-1);
-    }    
-
-    source = _argv[1];
-    destination = _argv[2];
-
-    for(int run = 3; run < _argc; run++)
-    {
-        if(std::string(_argv[run]) == "-x")
-        {
-            isExclude = true;
-        }
-        else if(std::string(_argv[run]) == "-d")
-        {
-            isDebug = true;
-        }
-        else 
-        {
-            paramFolder.push_back(_argv[run]);
-        }
     }
 }
 
@@ -143,13 +203,13 @@ void readSourceAndDestinationFromJson(json _j)
 
 void readFolderBundleFromJson(json _j)
 {
-    if(_j["folderbundle"] == nullptr)
+    if(_j["bundle"] == nullptr)
     {
-        std::cerr << "folderbundle not defined in config file" << std::endl;
+        std::cerr << "bundle not defined in config file" << std::endl;
         exit(-1);
     }
 
-    _j = _j["folderbundle"];
+    _j = _j["bundle"];
     for(int run = 0; run < paramFolder.size(); run++)
     {
         bool found = false;
@@ -158,7 +218,7 @@ void readFolderBundleFromJson(json _j)
             if(_j[fly]["name"] == paramFolder[run])
             {
                 found = true;
-                addFolderBundleFromJson(_j[fly]["folder"]);
+                addFolderBundleFromJson(_j[fly]["items"]);
             }
         }
 
@@ -254,7 +314,7 @@ void executeRsync()
     exit(-1);
 }
 
-void showDebugInfo()
+void showBashCommand()
 {
     std::string command;
     for(int run = 0; run < rsyncArgs.size(); run++)
@@ -269,22 +329,30 @@ void showDebugInfo()
         }
     }
 
-    std::cout << "command:\n\t" << command << std::endl;  
+    std::cout << command << std::endl;  
 }
 
 int main(int argc, char* argv[])
 {
+    configFilename = getenv("HOME") + std::string("/") + configFilename;
+    std::ifstream file(configFilename);
+    if(!file.good())
+    {
+        writeDefaultConfigFile();
+        exit(1);
+    }
+
     getParams(argc, argv);
+    
     readJsonConfigFile();
     buildRsyncCommandArguments();
-    if(isDebug)
+    if(isBash)
     {
-        showDebugInfo();
+        showBashCommand();
     }
-    executeRsync();   
-}
 
-// # rsync -auvz --progress /mnt/y/tmp 
-// #   --exclude='$RECYCLE.BIN' 
-// #   --exclude='System Volume Information' 
-// #   -e ssh drtosh@drtosh.de:/home/drtosh/stuff/tmp
+    if(!isBash)
+    {
+        executeRsync();   
+    }
+}
