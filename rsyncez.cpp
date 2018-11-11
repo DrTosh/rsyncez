@@ -24,7 +24,7 @@ void usage()
 {
     std::cout <<  "usage: sync [source] [destination] [ directory | bundle]" << std::endl <<
                   "  -x : directories are exluded, rest ist synced" << std::endl <<
-                  "  -c : generate default config file" << std::endl <<
+                  "  -c : create default config file" << std::endl <<
                   "  -b : only generate bash command" << std::endl <<
                   "  -h : show help" << std::endl;
 }
